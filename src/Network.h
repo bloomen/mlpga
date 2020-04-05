@@ -67,13 +67,13 @@ inline float activate(const float* const weights,
 }
 
 template<typename T>
-void write(std::function<void(const char* value, std::size_t size)>& writer, const T& value)
+void write(Writer& writer, const T& value)
 {
     writer(reinterpret_cast<const char*>(&value), sizeof(T));
 }
 
 template<typename T>
-void read(std::function<void(char* value, std::size_t size)>& reader, T& value)
+void read(Reader& reader, T& value)
 {
     reader(reinterpret_cast<char*>(&value), sizeof(T));
 }
