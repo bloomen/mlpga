@@ -10,6 +10,7 @@ src/genetic.h
 src/init.h
 src/Network.h
 src/utils.h
+src/transwarp.h
 )
 
 add_executable(${APP} ${SOURCES} src/test.cpp)

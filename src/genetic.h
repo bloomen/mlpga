@@ -1,8 +1,8 @@
 #pragma once
 
-#include <functional>
-#include <optional>
-#include <vector>
+#define TRANSWARP_MINIMUM_TASK_SIZE
+#include "transwarp.h"
+namespace tw = transwarp;
 
 #include "init.h"
 #include "Network.h"
@@ -57,109 +57,151 @@ inline void mutate(float* const w,
 struct Model
 {
     explicit
-    Model(Network network)
+    Model(Network network = {})
         : network{std::move(network)}
     {}
-    std::optional<float> fitness;
+    float fitness = -1.0f;
     Network network;
 };
 
-inline std::vector<Model> make_population(const std::size_t size,
-                                          const Network& network)
+inline void evaluate(Model& model,
+                     const std::function<float(const float*, const float*, std::size_t)>& fitness,
+                     const std::vector<std::vector<float>>& X,
+                     const std::vector<float>& y)
 {
-    std::vector<Model> population;
+    std::vector<float> pred;
+    for (const auto& row : X)
+    {
+        for (const auto value : model.network.predict(row))
+        {
+            pred.push_back(value);
+        }
+    }
+    assert(y.size() == pred.size());
+    model.fitness = fitness(y.data(), pred.data(), y.size());
+}
+
+inline std::vector<std::unique_ptr<Model>> make_population(const std::size_t size,
+                                                           const Network& network,
+                                                           const std::function<float(const float*, const float*, std::size_t)>& fitness,
+                                                           const std::vector<std::vector<float>>& X,
+                                                           const std::vector<float>& y,
+                                                           RandomEngine& random_engine)
+{
+    std::vector<std::unique_ptr<Model>> population;
     population.reserve(size);
     for (std::size_t p = 0; p < size; ++p)
     {
-        population.emplace_back(network.clone());
+        auto model = std::make_unique<Model>(network);
+        model->network.init_weights(random_engine);
+        evaluate(*model, fitness, X, y);
+        population.emplace_back(std::move(model));
     }
     return population;
 }
 
-inline void select_fittest(std::vector<Model>& population,
-                           const std::size_t n_fittest,
-                           const std::function<float(const float*, const float*, std::size_t)> fitness,
-                           const std::vector<std::vector<float>>& X,
-                           const std::vector<float>& y)
+inline void sort_by_fittest(std::vector<std::unique_ptr<Model>>& population)
 {
-    for (auto& model : population)
-    {
-        if (!model.fitness.has_value())
-        {
-            std::vector<float> pred;
-            for (const auto& row : X)
-            {
-                for (const auto value : model.network.predict(row))
-                {
-                    pred.push_back(value);
-                }
-            }
-            assert(y.size() == pred.size());
-            model.fitness = fitness(y.data(), pred.data(), y.size());
-        }
-    }
     std::sort(population.begin(), population.end(), [](const auto& x, const auto& y)
     {
-        return *x.fitness < *y.fitness;
+        return x->fitness < y->fitness;
     });
-    population.erase(population.begin() + n_fittest, population.end());
 }
 
-inline void reproduce(std::vector<Model>& population,
+inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Model>>& population,
+                                                 const std::size_t n_fittest,
+                                                 const float crossover_ratio,
+                                                 const float mutate_ratio,
+                                                 const float mutate_sigma,
+                                                 const std::function<float(const float*, const float*, std::size_t)>& fitness,
+                                                 const std::vector<std::vector<float>>& X,
+                                                 const std::vector<float>& y,
+                                                 RandomEngine& random_engine)
+{
+    assert(n_fittest % 2 == 0);
+    std::vector<std::shared_ptr<transwarp::task<void>>> tasks;
+    tasks.reserve(n_fittest / 2);
+    for (std::size_t i = 0; i < n_fittest; i += 2)
+    {
+        auto index_task = tw::make_value_task(i);
+        auto children_task = tw::make_task(tw::consume,
+            [&population, n_fittest, crossover_ratio, mutate_ratio,
+             mutate_sigma, &fitness, &X, &y, &random_engine](const auto i)
+            {
+                auto child1 = std::make_unique<Model>(*population[i]);
+                auto child2 = std::make_unique<Model>(*population[i + 1]);
+                crossover(child1->network.get_weights().data(),
+                          child2->network.get_weights().data(),
+                          child1->network.get_weights().size(),
+                          crossover_ratio,
+                          random_engine);
+                mutate(child1->network.get_weights().data(),
+                       child1->network.get_weights().size(),
+                       mutate_ratio,
+                       mutate_sigma,
+                       random_engine);
+                mutate(child2->network.get_weights().data(),
+                       child2->network.get_weights().size(),
+                       mutate_ratio,
+                       mutate_sigma,
+                       random_engine);
+                evaluate(*child1, fitness, X, y);
+                evaluate(*child2, fitness, X, y);
+                population[n_fittest + i] = std::move(child1);
+                population[n_fittest + i + 1] = std::move(child2);
+            }, index_task);
+        tasks.push_back(children_task);
+    }
+    return transwarp::make_task(transwarp::wait, transwarp::no_op, tasks);
+}
+
+inline Model optimize(const Network& network,
+                      const std::size_t n_generations,
+                      std::size_t population_size,
                       const float crossover_ratio,
                       const float mutate_ratio,
                       const float mutate_sigma,
+                      const std::vector<std::vector<float>>& X,
+                      const std::vector<std::vector<float>>& y,
+                      const std::function<float(const float*, const float*, std::size_t)>& fitness,
+                      Printer& printer,
                       RandomEngine& random_engine)
 {
-    const auto size = population.size();
-    assert(size % 2 == 0);
-    for (std::size_t i = 0; i < size; i += 2)
+    while (population_size % 2 != 0 || (population_size / 2) % 2 != 0)
     {
-        auto child1 = population[i].network.clone();
-        auto child2 = population[i + 1].network.clone();
-        crossover(child1.get_weights().data(),
-                  child2.get_weights().data(),
-                  child1.get_weights().size(),
-                  crossover_ratio,
-                  random_engine);
-        mutate(child1.get_weights().data(),
-               child1.get_weights().size(),
-               mutate_ratio,
-               mutate_sigma,
-               random_engine);
-        mutate(child2.get_weights().data(),
-               child2.get_weights().size(),
-               mutate_ratio,
-               mutate_sigma,
-               random_engine);
-        population.emplace_back(std::move(child1));
-        population.emplace_back(std::move(child2));
+        // ensure population_size and n_fittest are even
+        ++population_size;
     }
-}
+    printer("Running GA with population: " + std::to_string(population_size) + "\n");
 
-inline std::vector<Model> ga_optimize(const Network& network,
-                                      const std::size_t n_generations,
-                                      const std::size_t population_size,
-                                      const float crossover_ratio,
-                                      const float mutate_ratio,
-                                      const float mutate_sigma,
-                                      const std::vector<std::vector<float>>& X,
-                                      const std::vector<std::vector<float>>& y,
-                                      Printer& printer,
-                                      RandomEngine& random_engine)
-{
-    const auto n_fittest = population_size / 2;
-    auto population = mlpga::make_population(n_fittest, network);
     const auto y_ref = flatten(y);
+    auto population = mlpga::make_population(population_size,
+                                             network,
+                                             fitness,
+                                             X, y_ref, random_engine);
+    const auto n_fittest = population_size / 2;
+    printer("No of fittest: " + std::to_string(n_fittest) + "\n");
+
+    auto reproduce_task = reproduce(population,
+                                    n_fittest,
+                                    crossover_ratio,
+                                    mutate_ratio,
+                                    mutate_sigma,
+                                    fitness,
+                                    X, y_ref, random_engine);
+    const auto n_threads = std::thread::hardware_concurrency();
+    printer("No of CPU threads: " + std::to_string(n_threads) + "\n");
+    tw::parallel exec{n_threads};
+
     for (std::size_t g = 0; g < n_generations; ++g)
     {
-        mlpga::reproduce(population, crossover_ratio, mutate_ratio, mutate_sigma, random_engine);
         printer("Generation: " + std::to_string(g) + "\n");
-        printer("Population size: " + std::to_string(population.size()) + "\n");
-        mlpga::select_fittest(population, n_fittest, mae, X, y_ref);
-        printer("Best fitness: " + std::to_string(*population.front().fitness) + "\n");
+        reproduce_task->schedule_all(exec);
+        reproduce_task->wait();
+        mlpga::sort_by_fittest(population);
+        printer("Best fitness: " + std::to_string(population.front()->fitness) + "\n");
     }
-    return population;
+    return std::move(*population.front());
 }
 
 }

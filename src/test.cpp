@@ -46,23 +46,24 @@ int main()
 
     const std::vector<std::size_t> layers = {13, 13, 1};
     const std::size_t n_generations = 100;
-    const std::size_t population_size = 100;
-    const float crossover_ratio = 0.55f;
-    const float mutate_ratio = 0.15f;
-    const float mutate_sigma = 2.0f;
+    const std::size_t population_size = 20;
+    const float crossover_ratio = 0.5f;
+    const float mutate_ratio = 0.1f;
+    const float mutate_sigma = 1.0f;
 
     mlpga::Printer printer = [](const std::string& value) { std::cout << value << std::flush; };
     const mlpga::Network network{target_type, layers, &random_engine};
-    const auto population = mlpga::ga_optimize(network, n_generations,
-                                               population_size, crossover_ratio,
-                                               mutate_ratio, mutate_sigma,
-                                               split.X_train, split.y_train,
-                                               printer,
-                                               random_engine);
+    const auto model = mlpga::optimize(network, n_generations,
+                                       population_size, crossover_ratio,
+                                       mutate_ratio, mutate_sigma,
+                                       split.X_train, split.y_train,
+                                       mlpga::mae,
+                                       printer,
+                                       random_engine);
 
     std::stringstream ss;
     mlpga::Writer writer = [&ss](auto&&... p){ ss.write(std::forward<decltype(p)>(p)...); };
-    population.front().network.save(writer);
+    model.network.save(writer);
 
     ss.seekg(0);
     mlpga::Reader reader = [&ss](auto&&... p){ ss.read(std::forward<decltype(p)>(p)...); };

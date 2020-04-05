@@ -83,44 +83,55 @@ void read(std::function<void(char* value, std::size_t size)>& reader, T& value)
 class Network
 {
 public:
-    Network(const TargetType target_type,
-            std::vector<std::size_t> layers,
+    Network(const TargetType target_type = TargetType::Regression,
+            std::vector<std::size_t> layers = {1},
             RandomEngine* random_engine = nullptr)
         : target_type_{target_type}
         , layers_{std::move(layers)}
     {
         assert(layers_.size() > 0);
 
-        auto weights_in_layer = [this](const std::size_t i)
-        {
-            if (i == 0)
-            {
-                return 2 * layers_[i];
-            }
-            else
-            {
-                return layers_[i - 1] * layers_[i] + layers_[i];
-            }
-        };
-
         std::size_t weight_count = 0;
         for (std::size_t i = 0; i < layers_.size(); ++i)
         {
-            weight_count += weights_in_layer(i);
+            if (i == 0)
+            {
+                weight_count += 2 * layers_[i];
+            }
+            else
+            {
+                weight_count += layers_[i - 1] * layers_[i] + layers_[i];
+            }
         }
         weights_.resize(weight_count);
 
         if (random_engine)
         {
-            auto weights = weights_.data();
-            for (std::size_t i = 0; i < layers_.size(); ++i)
-            {
-                const auto count = weights_in_layer(i);
-                detail::xavier(weights, count, *random_engine);
-                weights += count;
-            }
-            assert(weights == weights_.data() + weights_.size());
+            init_weights(*random_engine);
         }
+    }
+
+    void init_weights(RandomEngine& random_engine)
+    {
+        auto weights = weights_.data();
+        for (std::size_t i = 0; i < layers_.size(); ++i)
+        {
+            for (std::size_t j = 0; j < layers_[i]; ++j)
+            {
+                std::size_t weight_count;
+                if (i == 0)
+                {
+                    weight_count = 2;
+                }
+                else
+                {
+                    weight_count = layers_[i - 1] + 1;
+                }
+                detail::xavier(weights, weight_count, random_engine);
+                weights += weight_count;
+            }
+        }
+        assert(weights == weights_.data() + weights_.size());
     }
 
     std::string arch_string() const
@@ -199,13 +210,6 @@ public:
         Network net{static_cast<TargetType>(target_type), layers};
         net.set_weights(weights);
         return net;
-    }
-
-    Network clone() const
-    {
-        Network cloned{get_target_type(), get_layers()};
-        cloned.set_weights(get_weights());
-        return cloned;
     }
 
     std::vector<float> predict(const std::vector<float>& input) const
