@@ -46,7 +46,7 @@ int main()
 
     const std::vector<std::size_t> layers = {13, 13, 1};
     const std::size_t n_generations = 100;
-    const std::size_t population_size = 20;
+    const std::size_t population_size = 1000;
     const float crossover_ratio = 0.5f;
     const float mutate_ratio = 0.1f;
     const float mutate_sigma = 1.0f;

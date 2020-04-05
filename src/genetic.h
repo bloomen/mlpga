@@ -123,10 +123,9 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
     tasks.reserve(n_fittest / 2);
     for (std::size_t i = 0; i < n_fittest; i += 2)
     {
-        auto index_task = tw::make_value_task(i);
-        auto children_task = tw::make_task(tw::consume,
+        auto children_task = tw::make_task(tw::root,
             [&population, n_fittest, crossover_ratio, mutate_ratio,
-             mutate_sigma, &fitness, &X, &y, &random_engine](const auto i)
+             mutate_sigma, &fitness, &X, &y, &random_engine, i]
             {
                 auto child1 = std::make_unique<Model>(*population[i]);
                 auto child2 = std::make_unique<Model>(*population[i + 1]);
@@ -149,7 +148,7 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
                 evaluate(*child2, fitness, X, y);
                 population[n_fittest + i] = std::move(child1);
                 population[n_fittest + i + 1] = std::move(child2);
-            }, index_task);
+            });
         tasks.push_back(children_task);
     }
     return transwarp::make_task(transwarp::wait, transwarp::no_op, tasks);
