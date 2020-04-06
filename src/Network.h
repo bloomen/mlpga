@@ -41,7 +41,7 @@ using Reader = std::function<void(char* value, std::size_t size)>;
 namespace detail
 {
 
-inline void softmax(float* output, const std::size_t n)
+inline void softmax(float* const output, const std::size_t n)
 {
     const auto D = *std::max_element(output, output + n);
     float denom = 1e-6f;
@@ -70,14 +70,15 @@ inline void relu(float& x)
 }
 
 inline float activate(const float* const weights,
-                      const std::vector<float>& inputs)
+                      const float* const inputs,
+                      const std::size_t n)
 {
     float output = 0.0f;
-    for (std::size_t i = 0; i < inputs.size(); ++i)
+    for (std::size_t i = 0; i < n; ++i)
     {
         output += weights[i] * inputs[i];
     }
-    output += weights[inputs.size()]; // bias
+    output += weights[n]; // bias
     return output;
 }
 
@@ -132,17 +133,9 @@ public:
         auto weights = weights_.data();
         for (std::size_t i = 0; i < layers_.size(); ++i)
         {
+            const auto weight_count = i == 0 ? 2u : layers_[i - 1] + 1;
             for (std::size_t j = 0; j < layers_[i]; ++j)
             {
-                std::size_t weight_count;
-                if (i == 0)
-                {
-                    weight_count = 2;
-                }
-                else
-                {
-                    weight_count = layers_[i - 1] + 1;
-                }
                 detail::xavier(weights, weight_count, random_engine);
                 weights += weight_count;
             }
@@ -232,52 +225,59 @@ public:
         return net;
     }
 
-    std::vector<float> predict(const std::vector<float>& input) const
+    void predict(float* const output, const float* const input) const
     {
-        std::vector<float> output = input;
-        std::vector<float> new_input;
-        auto weights = weights_.data();
+        const auto input_size = layers_.front();
+        const auto output_size = layers_.back();
 
+        static thread_local std::vector<float> new_in(*std::max_element(layers_.begin(), layers_.end()));
+        static thread_local std::vector<float> new_out(new_in.size());
+
+        auto weights = weights_.data();
+        std::size_t current_size = input_size;
+        std::size_t weight_count = 2u;
+        const float* source = input;
         for (std::size_t i = 0; i < layers_.size(); ++i)
         {
-            new_input.reserve(layers_[i]);
+            auto target = i == layers_.size() - 1 ? output : new_out.data();
             for (std::size_t j = 0; j < layers_[i]; ++j)
             {
-                auto value = detail::activate(weights, output);
+                auto value = detail::activate(weights, source, current_size);
                 if (i < layers_.size() - 1)
                 {
                     detail::relu(value);
                 }
-                new_input.push_back(value);
-                if (i == 0)
-                {
-                    weights += 2;
-                }
-                else
-                {
-                    weights += layers_[i - 1] + 1;
-                }
+                target[j] = value;
+                weights += weight_count;
             }
-            output = std::move(new_input);
+            if (i < layers_.size() - 1)
+            {
+                current_size = layers_[i];
+                weight_count = current_size + 1;
+                source = new_in.data();
+                std::copy(target, target + layers_[i], new_in.begin());
+            }
         }
         assert(weights == weights_.data() + weights_.size());
 
         if (target_.type == Target::Classification)
         {
-            if (output.size() == 1)
+            if (output_size == 1)
             {
-                detail::sigmoid(output.front());
+                detail::sigmoid(*output);
             }
             else
             {
-                detail::softmax(output.data(), output.size());
+                detail::softmax(output, output_size);
             }
-            for (auto& value : output)
+            const auto factor = target_.class1 - target_.class0;
+            const auto offset = target_.class0;
+            std::for_each(output, output + output_size, [factor, offset](auto& x)
             {
-                value = (target_.class1 - target_.class0) * value + target_.class0;
-            }
+                x *= factor;
+                x += offset;
+            });
         }
-        return output;
     }
 
 private:

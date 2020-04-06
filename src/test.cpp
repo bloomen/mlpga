@@ -73,7 +73,9 @@ int main()
     std::vector<std::vector<float>> pred;
     for (const auto& row : split.X_test)
     {
-        pred.push_back(net.predict(row));
+        std::vector<float> output(net.get_layers().back());
+        net.predict(output.data(), row.data());
+        pred.push_back(std::move(output));
     }
 
     const auto y_ref = mlpga::flatten(split.y_test);

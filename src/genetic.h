@@ -69,15 +69,15 @@ inline void evaluate(Model& model,
                      const std::vector<std::vector<float>>& X,
                      const std::vector<float>& y)
 {
-    std::vector<float> pred;
+    const auto n_outputs = model.network.get_layers().back();
+    std::vector<float> pred(y);
+    auto p = pred.data();
     for (const auto& row : X)
     {
-        for (const auto value : model.network.predict(row))
-        {
-            pred.push_back(value);
-        }
+        model.network.predict(p, row.data());
+        p += n_outputs;
     }
-    assert(y.size() == pred.size());
+    assert(p == pred.data() + pred.size());
     model.fitness = fitness(y.data(), pred.data(), y.size());
 }
 
