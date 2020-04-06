@@ -22,9 +22,9 @@ int main()
         f >> y.back()[0];
     }
 
-    const auto target_type = mlpga::Regression;
+    const mlpga::Target target{mlpga::Target::Regression};
 
-    if (target_type == mlpga::Classification)
+    if (target.type == mlpga::Target::Classification)
     {
         for (auto& value : y)
         {
@@ -52,7 +52,7 @@ int main()
     const float mutate_sigma = 1.0f;
 
     mlpga::Printer printer = [](const std::string& value) { std::cout << value << std::flush; };
-    const mlpga::Network network{target_type, layers, &random_engine};
+    const mlpga::Network network{target, layers, &random_engine};
     const auto model = mlpga::optimize(network, n_generations,
                                        population_size, crossover_ratio,
                                        mutate_ratio, mutate_sigma,

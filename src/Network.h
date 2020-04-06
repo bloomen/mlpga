@@ -13,10 +13,25 @@
 namespace mlpga
 {
 
-enum TargetType : std::uint8_t
+struct Target
 {
-    Classification,
-    Regression,
+    enum Type : std::uint8_t
+    {
+        Classification,
+        Regression,
+    };
+
+    Target(const Type type,
+           const float class0 = 0.0f,
+           const float class1 = 1.0f)
+        : type{type}
+        , class0{class0}
+        , class1{class1}
+    {}
+
+    Type type;
+    float class0;
+    float class1;
 };
 
 using Printer = std::function<void(const std::string& value)>;
@@ -83,13 +98,14 @@ void read(Reader& reader, T& value)
 class Network
 {
 public:
-    Network(const TargetType target_type = TargetType::Regression,
+    Network(Target target = Target{Target::Regression},
             std::vector<std::size_t> layers = {1},
             RandomEngine* random_engine = nullptr)
-        : target_type_{target_type}
+        : target_{std::move(target)}
         , layers_{std::move(layers)}
     {
         assert(layers_.size() > 0);
+        assert(target_.class0 < target_.class1);
 
         std::size_t weight_count = 0;
         for (std::size_t i = 0; i < layers_.size(); ++i)
@@ -148,9 +164,9 @@ public:
         return arch;
     }
 
-    TargetType get_target_type() const
+    const Target& get_target() const
     {
-        return target_type_;
+        return target_;
     }
 
     const std::vector<std::size_t>& get_layers() const
@@ -176,7 +192,9 @@ public:
 
     void save(Writer& writer) const
     {
-        detail::write(writer, target_type_);
+        detail::write(writer, target_.type);
+        detail::write(writer, target_.class0);
+        detail::write(writer, target_.class1);
         detail::write(writer, layers_.size());
         for (const auto& layer : layers_)
         {
@@ -191,8 +209,10 @@ public:
 
     static Network load(Reader& reader)
     {
-        TargetType target_type;
-        detail::read(reader, target_type);
+        Target target{Target::Regression};
+        detail::read(reader, target.type);
+        detail::read(reader, target.class0);
+        detail::read(reader, target.class1);
         std::size_t layer_count;
         detail::read(reader, layer_count);
         std::vector<std::size_t> layers(layer_count);
@@ -207,8 +227,8 @@ public:
         {
             detail::read(reader, value);
         }
-        Network net{static_cast<TargetType>(target_type), layers};
-        net.set_weights(weights);
+        Network net{std::move(target), std::move(layers)};
+        net.set_weights(std::move(weights));
         return net;
     }
 
@@ -242,7 +262,7 @@ public:
         }
         assert(weights == weights_.data() + weights_.size());
 
-        if (target_type_ == TargetType::Classification)
+        if (target_.type == Target::Classification)
         {
             if (output.size() == 1)
             {
@@ -254,14 +274,14 @@ public:
             }
             for (auto& value : output)
             {
-                value = value > 0.5f ? 1.0f : 0.0f;
+                value = (target_.class1 - target_.class0) * value + target_.class0;
             }
         }
         return output;
     }
 
 private:
-    TargetType target_type_;
+    Target target_;
     std::vector<std::size_t> layers_;
     std::vector<float> weights_;
 };
