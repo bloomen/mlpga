@@ -115,8 +115,7 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
                                                  const float mutate_sigma,
                                                  const std::function<float(const float*, const float*, std::size_t)>& fitness,
                                                  const std::vector<std::vector<float>>& X,
-                                                 const std::vector<float>& y,
-                                                 RandomEngine& random_engine)
+                                                 const std::vector<float>& y)
 {
     assert(n_fittest % 2 == 0);
     std::vector<std::shared_ptr<transwarp::task<void>>> tasks;
@@ -125,10 +124,11 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
     {
         auto children_task = tw::make_task(tw::root,
             [&population, n_fittest, crossover_ratio, mutate_ratio,
-             mutate_sigma, &fitness, &X, &y, &random_engine, i]
+             mutate_sigma, &fitness, &X, &y, i]
             {
                 auto child1 = std::make_unique<Model>(*population[i]);
                 auto child2 = std::make_unique<Model>(*population[i + 1]);
+                static thread_local std::default_random_engine random_engine{i};
                 crossover(child1->network.get_weights().data(),
                           child2->network.get_weights().data(),
                           child1->network.get_weights().size(),
@@ -188,7 +188,7 @@ inline Model optimize(const Network& network,
                                     mutate_ratio,
                                     mutate_sigma,
                                     fitness,
-                                    X, y_ref, random_engine);
+                                    X, y_ref);
     const auto n_threads = std::thread::hardware_concurrency();
     printer("No of CPU threads: " + std::to_string(n_threads) + "\n");
     tw::parallel exec{n_threads};

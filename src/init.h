@@ -1,6 +1,5 @@
 #pragma once
 
-#include <mutex>
 #include <random>
 
 namespace mlpga
@@ -25,7 +24,6 @@ public:
     {}
     result_type operator()() override
     {
-        std::lock_guard lock{mutex_};
         return random_engine_();
     }
     result_type min() const override
@@ -37,7 +35,6 @@ public:
         return std::default_random_engine::max();
     }
 private:
-    std::mutex mutex_;
     std::default_random_engine random_engine_;
 };
 
