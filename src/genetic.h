@@ -67,18 +67,17 @@ struct Model
 inline void evaluate(Model& model,
                      const std::function<float(const float*, const float*, std::size_t)>& fitness,
                      const std::vector<std::vector<float>>& X,
-                     const std::vector<float>& y)
+                     const std::vector<float>& y,
+                     float* const pred)
 {
     const auto n_outputs = model.network.get_layers().back();
-    std::vector<float> pred(y);
-    auto p = pred.data();
+    auto p = pred;
     for (const auto& row : X)
     {
         model.network.predict(p, row.data());
         p += n_outputs;
     }
-    assert(p == pred.data() + pred.size());
-    model.fitness = fitness(y.data(), pred.data(), y.size());
+    model.fitness = fitness(y.data(), pred, y.size());
 }
 
 inline std::vector<std::unique_ptr<Model>> make_population(const std::size_t size,
@@ -88,13 +87,14 @@ inline std::vector<std::unique_ptr<Model>> make_population(const std::size_t siz
                                                            const std::vector<float>& y,
                                                            RandomEngine& random_engine)
 {
+    std::vector<float> pred(y.size());
     std::vector<std::unique_ptr<Model>> population;
     population.reserve(size);
     for (std::size_t p = 0; p < size; ++p)
     {
         auto model = std::make_unique<Model>(network);
         model->network.init_weights(random_engine);
-        evaluate(*model, fitness, X, y);
+        evaluate(*model, fitness, X, y, pred.data());
         population.emplace_back(std::move(model));
     }
     return population;
@@ -144,8 +144,9 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
                        mutate_ratio,
                        mutate_sigma,
                        random_engine);
-                evaluate(*child1, fitness, X, y);
-                evaluate(*child2, fitness, X, y);
+                static thread_local std::vector<float> pred(y.size());
+                evaluate(*child1, fitness, X, y, pred.data());
+                evaluate(*child2, fitness, X, y, pred.data());
                 population[n_fittest + i] = std::move(child1);
                 population[n_fittest + i + 1] = std::move(child2);
             });
