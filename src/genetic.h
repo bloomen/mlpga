@@ -13,6 +13,19 @@ namespace tw = transwarp;
 namespace mlpga
 {
 
+struct Model
+{
+    explicit
+    Model(Network network = {})
+        : network{std::move(network)}
+    {}
+    float fitness = -1.0f;
+    Network network;
+};
+
+namespace detail
+{
+
 template<typename RandomEngine>
 inline void crossover(float* const w1,
                       float* const w2,
@@ -57,16 +70,6 @@ inline void mutate(float* const w,
         }
     }
 }
-
-struct Model
-{
-    explicit
-    Model(Network network = {})
-        : network{std::move(network)}
-    {}
-    float fitness = -1.0f;
-    Network network;
-};
 
 inline void evaluate(Model& model,
                      const std::function<float(const float*, const float*, std::size_t)>& fitness,
@@ -160,6 +163,8 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
     return transwarp::make_task(transwarp::wait, transwarp::no_op, tasks);
 }
 
+}
+
 inline Model optimize(const Network& network,
                       const std::size_t n_generations,
                       std::size_t population_size,
@@ -180,22 +185,22 @@ inline Model optimize(const Network& network,
 
     std::default_random_engine random_engine{std::time(nullptr)};
     const auto y_ref = flatten(y);
-    auto population = mlpga::make_population(population_size,
-                                             network,
-                                             fitness,
-                                             X, y_ref,
-                                             random_engine);
+    auto population = detail::make_population(population_size,
+                                              network,
+                                              fitness,
+                                              X, y_ref,
+                                              random_engine);
 
     const auto n_fittest = population_size / 2;
     printer("No of fittest: " + std::to_string(n_fittest) + "\n");
 
-    auto reproduce_task = reproduce(population,
-                                    n_fittest,
-                                    crossover_ratio,
-                                    mutate_ratio,
-                                    mutate_sigma,
-                                    fitness,
-                                    X, y_ref);
+    auto reproduce_task = detail::reproduce(population,
+                                            n_fittest,
+                                            crossover_ratio,
+                                            mutate_ratio,
+                                            mutate_sigma,
+                                            fitness,
+                                            X, y_ref);
     const auto n_threads = std::thread::hardware_concurrency();
     printer("No of CPU threads: " + std::to_string(n_threads) + "\n");
     tw::parallel exec{n_threads};
@@ -205,7 +210,7 @@ inline Model optimize(const Network& network,
         printer("Generation: " + std::to_string(g) + "\n");
         reproduce_task->schedule_all(exec);
         reproduce_task->wait();
-        mlpga::sort_by_fittest(population);
+        detail::sort_by_fittest(population);
         printer("Best fitness: " + std::to_string(population.front()->fitness) + "\n");
     }
     return std::move(*population.front());
