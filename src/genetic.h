@@ -27,46 +27,37 @@ namespace detail
 {
 
 template<typename RandomEngine>
-inline void crossover(float* const w1,
-                      float* const w2,
-                      const std::size_t n,
-                      const float ratio,
-                      RandomEngine& random_engine)
+inline void give_birth(float* const w1,
+                       float* const w2,
+                       const std::size_t n,
+                       const float crossover_ratio,
+                       const float mutate_ratio,
+                       const float mutate_sigma,
+                       RandomEngine& random_engine)
 {
     assert(w1 != nullptr);
     assert(w2 != nullptr);
     assert(n > 0);
-    assert(ratio > 0.0f);
-    assert(ratio < 1.0f);
+    assert(crossover_ratio > 0.0f);
+    assert(crossover_ratio < 1.0f);
+    assert(mutate_ratio > 0.0f);
+    assert(mutate_ratio < 1.0f);
+    assert(mutate_sigma > 0.0f);
     std::uniform_real_distribution<float> uniform;
+    std::normal_distribution<float> normal(0.0f, mutate_sigma);
     for (std::size_t i = 0; i < n; ++i)
     {
-        if (uniform(random_engine) < ratio)
+        if (uniform(random_engine) < crossover_ratio)
         {
             std::swap(w1[i], w2[i]);
         }
-    }
-}
-
-template<typename RandomEngine>
-inline void mutate(float* const w,
-                   const std::size_t n,
-                   const float ratio,
-                   const float sigma,
-                   RandomEngine& random_engine)
-{
-    assert(w != nullptr);
-    assert(n > 0);
-    assert(ratio > 0.0f);
-    assert(ratio < 1.0f);
-    assert(sigma > 0.0f);
-    std::uniform_real_distribution<float> uniform;
-    std::normal_distribution<float> normal(0.0f, sigma);
-    for (std::size_t i = 0; i < n; ++i)
-    {
-        if (uniform(random_engine) < ratio)
+        if (uniform(random_engine) < mutate_ratio)
         {
-            w[i] += w[i] * normal(random_engine);
+            w1[i] += w1[i] * normal(random_engine);
+        }
+        if (uniform(random_engine) < mutate_ratio)
+        {
+            w2[i] += w2[i] * normal(random_engine);
         }
     }
 }
@@ -118,7 +109,7 @@ inline void sort_by_fittest(std::vector<std::unique_ptr<Model>>& population)
 
 struct ReproParams
 {
-    std::vector<std::unique_ptr<Model>>& population;
+    const std::vector<std::unique_ptr<Model>>& population;
     const std::size_t n_fittest;
     const float crossover_ratio;
     const float mutate_ratio;
@@ -143,21 +134,13 @@ inline std::shared_ptr<tw::task<void>> reproduce(const ReproParams& params)
                 auto child2 = params.population[params.n_fittest + i + 1].get();
                 *child1 = *params.population[i];
                 *child2 = *params.population[i + 1];
-                crossover(child1->network.get_weights().data(),
-                          child2->network.get_weights().data(),
-                          child1->network.get_weights().size(),
-                          params.crossover_ratio,
-                          random_engine);
-                mutate(child1->network.get_weights().data(),
-                       child1->network.get_weights().size(),
-                       params.mutate_ratio,
-                       params.mutate_sigma,
-                       random_engine);
-                mutate(child2->network.get_weights().data(),
-                       child2->network.get_weights().size(),
-                       params.mutate_ratio,
-                       params.mutate_sigma,
-                       random_engine);
+                give_birth(child1->network.get_weights().data(),
+                           child2->network.get_weights().data(),
+                           child1->network.get_weights().size(),
+                           params.crossover_ratio,
+                           params.mutate_ratio,
+                           params.mutate_sigma,
+                           random_engine);
                 static thread_local std::vector<float> pred(params.y.size());
                 evaluate(*child1, params.fitness, params.X, params.y, pred.data());
                 evaluate(*child2, params.fitness, params.X, params.y, pred.data());
