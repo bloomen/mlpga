@@ -129,6 +129,7 @@ inline std::shared_ptr<tw::task<void>> reproduce(const ReproParams& params)
         auto children_task = tw::make_task(tw::root,
             [&params, i]
             {
+                // TODO: move this to the GPU. Weight update and predict
                 static thread_local std::default_random_engine random_engine{time_seed()};
                 auto child1 = params.population[params.n_fittest + i].get();
                 auto child2 = params.population[params.n_fittest + i + 1].get();
