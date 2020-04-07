@@ -3,9 +3,13 @@
 #include <ctime>
 
 #define TRANSWARP_MINIMUM_TASK_SIZE
+#define TRANSWARP_CPP11
 #include "transwarp.h"
 namespace tw = transwarp;
 
+#ifdef MLPGA_USE_GPU
+#include "gpufunc.h"
+#endif
 #include "init.h"
 #include "Network.h"
 #include "utils.h"
@@ -91,7 +95,7 @@ inline std::vector<std::unique_ptr<Model>> make_population(const std::size_t siz
     population.reserve(size);
     for (std::size_t p = 0; p < size; ++p)
     {
-        auto model = std::make_unique<Model>(network);
+        auto model = std::unique_ptr<Model>{new Model{network}};
         model->network.init_weights(random_engine);
         evaluate(*model, fitness, X, y, pred.data());
         population.emplace_back(std::move(model));
@@ -101,7 +105,7 @@ inline std::vector<std::unique_ptr<Model>> make_population(const std::size_t siz
 
 inline void sort_by_fittest(std::vector<std::unique_ptr<Model>>& population)
 {
-    std::sort(population.begin(), population.end(), [](const auto& x, const auto& y)
+    std::sort(population.begin(), population.end(), [](const std::unique_ptr<Model>& x, const std::unique_ptr<Model>& y)
     {
         return x->fitness < y->fitness;
     });

@@ -62,11 +62,11 @@ int main()
                                        printer);
 
     std::stringstream ss;
-    mlpga::Writer writer = [&ss](auto&&... p){ ss.write(std::forward<decltype(p)>(p)...); };
+    mlpga::Writer writer = [&ss](const char* v, std::size_t s){ ss.write(v, s); };
     model.network.save(writer);
 
     ss.seekg(0);
-    mlpga::Reader reader = [&ss](auto&&... p){ ss.read(std::forward<decltype(p)>(p)...); };
+    mlpga::Reader reader = [&ss](char* v, std::size_t s){ ss.read(v, s); };
     const auto net = mlpga::Network::load(reader);
 
     std::cout << "Prediction..." << std::endl;

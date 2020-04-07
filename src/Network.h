@@ -5,6 +5,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <random>
 #include <string>
 #include <type_traits>
 
@@ -100,7 +101,7 @@ void read(Reader& reader, T& value)
 class Network
 {
 public:
-    template<typename RandomEngine = nullptr_t>
+    template<typename RandomEngine = std::default_random_engine>
     Network(Target target = Target{Target::Regression},
             std::vector<std::size_t> layers = {1},
             RandomEngine* random_engine = nullptr)
@@ -124,12 +125,9 @@ public:
         }
         weights_.resize(weight_count);
 
-        if constexpr (!std::is_same_v<RandomEngine, nullptr_t>)
+        if (random_engine)
         {
-            if (random_engine)
-            {
-                init_weights(*random_engine);
-            }
+            init_weights(*random_engine);
         }
     }
 
@@ -278,7 +276,7 @@ public:
             }
             const auto factor = target_.class1 - target_.class0;
             const auto offset = target_.class0;
-            std::for_each(output, output + output_size, [factor, offset](auto& x)
+            std::for_each(output, output + output_size, [factor, offset](float& x)
             {
                 x *= factor;
                 x += offset;
