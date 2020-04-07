@@ -151,7 +151,7 @@ public:
 
     std::string arch_string() const
     {
-        std::string arch = "Network arch (" + std::to_string(layers_.size()) + "): ";
+        std::string arch = "Network arch (" + std::to_string(weights_.size()) + "): ";
         for (const auto& layer : layers_)
         {
             arch += std::to_string(layer);
