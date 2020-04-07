@@ -116,47 +116,51 @@ inline void sort_by_fittest(std::vector<std::unique_ptr<Model>>& population)
     });
 }
 
-inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Model>>& population,
-                                                 const std::size_t n_fittest,
-                                                 const float crossover_ratio,
-                                                 const float mutate_ratio,
-                                                 const float mutate_sigma,
-                                                 const std::function<float(const float*, const float*, std::size_t)>& fitness,
-                                                 const std::vector<std::vector<float>>& X,
-                                                 const std::vector<float>& y)
+struct ReproParams
 {
-    assert(n_fittest % 2 == 0);
+    std::vector<std::unique_ptr<Model>>& population;
+    const std::size_t n_fittest;
+    const float crossover_ratio;
+    const float mutate_ratio;
+    const float mutate_sigma;
+    const std::function<float(const float*, const float*, std::size_t)>& fitness;
+    const std::vector<std::vector<float>>& X;
+    const std::vector<float>& y;
+};
+
+inline std::shared_ptr<tw::task<void>> reproduce(const ReproParams& params)
+{
+    assert(params.n_fittest % 2 == 0);
     std::vector<std::shared_ptr<transwarp::task<void>>> tasks;
-    tasks.reserve(n_fittest / 2);
-    for (std::size_t i = 0; i < n_fittest; i += 2)
+    tasks.reserve(params.n_fittest / 2);
+    for (std::size_t i = 0; i < params.n_fittest; i += 2)
     {
         auto children_task = tw::make_task(tw::root,
-            [&population, n_fittest, crossover_ratio, mutate_ratio,
-             mutate_sigma, &fitness, &X, &y, i]
+            [&params, i]
             {
-                auto child1 = population[n_fittest + i].get();
-                *child1 = *population[i];
-                auto child2 = population[n_fittest + i + 1].get();
-                *child2 = *population[i + 1];
-                static thread_local std::default_random_engine random_engine{std::time(nullptr)};
+                static thread_local std::default_random_engine random_engine{time_seed()};
+                auto child1 = params.population[params.n_fittest + i].get();
+                auto child2 = params.population[params.n_fittest + i + 1].get();
+                *child1 = *params.population[i];
+                *child2 = *params.population[i + 1];
                 crossover(child1->network.get_weights().data(),
                           child2->network.get_weights().data(),
                           child1->network.get_weights().size(),
-                          crossover_ratio,
+                          params.crossover_ratio,
                           random_engine);
                 mutate(child1->network.get_weights().data(),
                        child1->network.get_weights().size(),
-                       mutate_ratio,
-                       mutate_sigma,
+                       params.mutate_ratio,
+                       params.mutate_sigma,
                        random_engine);
                 mutate(child2->network.get_weights().data(),
                        child2->network.get_weights().size(),
-                       mutate_ratio,
-                       mutate_sigma,
+                       params.mutate_ratio,
+                       params.mutate_sigma,
                        random_engine);
-                static thread_local std::vector<float> pred(y.size());
-                evaluate(*child1, fitness, X, y, pred.data());
-                evaluate(*child2, fitness, X, y, pred.data());
+                static thread_local std::vector<float> pred(params.y.size());
+                evaluate(*child1, params.fitness, params.X, params.y, pred.data());
+                evaluate(*child2, params.fitness, params.X, params.y, pred.data());
             });
         tasks.push_back(children_task);
     }
@@ -183,7 +187,7 @@ inline Model optimize(const Network& network,
     }
     printer("Running GA with population: " + std::to_string(population_size) + "\n");
 
-    std::default_random_engine random_engine{std::time(nullptr)};
+    std::default_random_engine random_engine{time_seed()};
     const auto y_ref = flatten(y);
     auto population = detail::make_population(population_size,
                                               network,
@@ -194,13 +198,18 @@ inline Model optimize(const Network& network,
     const auto n_fittest = population_size / 2;
     printer("No of fittest: " + std::to_string(n_fittest) + "\n");
 
-    auto reproduce_task = detail::reproduce(population,
-                                            n_fittest,
-                                            crossover_ratio,
-                                            mutate_ratio,
-                                            mutate_sigma,
-                                            fitness,
-                                            X, y_ref);
+    const detail::ReproParams repro_params {
+        population,
+        n_fittest,
+        crossover_ratio,
+        mutate_ratio,
+        mutate_sigma,
+        fitness,
+        X,
+        y_ref
+    };
+    auto reproduce_task = detail::reproduce(repro_params);
+
     const auto n_threads = std::thread::hardware_concurrency();
     printer("No of CPU threads: " + std::to_string(n_threads) + "\n");
     tw::parallel exec{n_threads};

@@ -39,7 +39,7 @@ int main()
         }
     }
 
-    std::default_random_engine random_engine{std::time(nullptr)};
+    std::default_random_engine random_engine{mlpga::time_seed()};
 
     const auto split = mlpga::split_train_test(X, y, 0.3f, random_engine);
     std::cout << "Training with " << split.X_train.size() << " samples" << std::endl;

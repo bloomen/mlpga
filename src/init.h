@@ -1,9 +1,15 @@
 #pragma once
 
+#include <ctime>
 #include <random>
 
 namespace mlpga
 {
+
+inline long unsigned int time_seed()
+{
+    return static_cast<long unsigned int>(std::time(nullptr));
+}
 
 namespace detail
 {
