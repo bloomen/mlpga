@@ -131,8 +131,10 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
             [&population, n_fittest, crossover_ratio, mutate_ratio,
              mutate_sigma, &fitness, &X, &y, i]
             {
-                auto child1 = std::make_unique<Model>(*population[i]);
-                auto child2 = std::make_unique<Model>(*population[i + 1]);
+                auto child1 = population[n_fittest + i].get();
+                *child1 = *population[i];
+                auto child2 = population[n_fittest + i + 1].get();
+                *child2 = *population[i + 1];
                 static thread_local std::default_random_engine random_engine{std::time(nullptr)};
                 crossover(child1->network.get_weights().data(),
                           child2->network.get_weights().data(),
@@ -152,8 +154,6 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
                 static thread_local std::vector<float> pred(y.size());
                 evaluate(*child1, fitness, X, y, pred.data());
                 evaluate(*child2, fitness, X, y, pred.data());
-                population[n_fittest + i] = std::move(child1);
-                population[n_fittest + i + 1] = std::move(child2);
             });
         tasks.push_back(children_task);
     }
