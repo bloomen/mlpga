@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ctime>
+
 #define TRANSWARP_MINIMUM_TASK_SIZE
 #include "transwarp.h"
 namespace tw = transwarp;
@@ -11,6 +13,7 @@ namespace tw = transwarp;
 namespace mlpga
 {
 
+template<typename RandomEngine>
 inline void crossover(float* const w1,
                       float* const w2,
                       const std::size_t n,
@@ -32,6 +35,7 @@ inline void crossover(float* const w1,
     }
 }
 
+template<typename RandomEngine>
 inline void mutate(float* const w,
                    const std::size_t n,
                    const float ratio,
@@ -80,6 +84,7 @@ inline void evaluate(Model& model,
     model.fitness = fitness(y.data(), pred, y.size());
 }
 
+template<typename RandomEngine>
 inline std::vector<std::unique_ptr<Model>> make_population(const std::size_t size,
                                                            const Network& network,
                                                            const std::function<float(const float*, const float*, std::size_t)>& fitness,
@@ -128,7 +133,7 @@ inline std::shared_ptr<tw::task<void>> reproduce(std::vector<std::unique_ptr<Mod
             {
                 auto child1 = std::make_unique<Model>(*population[i]);
                 auto child2 = std::make_unique<Model>(*population[i + 1]);
-                static thread_local std::default_random_engine random_engine{i};
+                static thread_local std::default_random_engine random_engine{std::time(nullptr)};
                 crossover(child1->network.get_weights().data(),
                           child2->network.get_weights().data(),
                           child1->network.get_weights().size(),
@@ -164,8 +169,7 @@ inline Model optimize(const Network& network,
                       const std::vector<std::vector<float>>& X,
                       const std::vector<std::vector<float>>& y,
                       const std::function<float(const float*, const float*, std::size_t)>& fitness,
-                      Printer& printer,
-                      RandomEngine& random_engine)
+                      Printer& printer)
 {
     while (population_size % 2 != 0 || (population_size / 2) % 2 != 0)
     {
@@ -174,11 +178,14 @@ inline Model optimize(const Network& network,
     }
     printer("Running GA with population: " + std::to_string(population_size) + "\n");
 
+    std::default_random_engine random_engine{std::time(nullptr)};
     const auto y_ref = flatten(y);
     auto population = mlpga::make_population(population_size,
                                              network,
                                              fitness,
-                                             X, y_ref, random_engine);
+                                             X, y_ref,
+                                             random_engine);
+
     const auto n_fittest = population_size / 2;
     printer("No of fittest: " + std::to_string(n_fittest) + "\n");
 

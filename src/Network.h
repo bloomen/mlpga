@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 #include "init.h"
 #include "utils.h"
@@ -99,6 +100,7 @@ void read(Reader& reader, T& value)
 class Network
 {
 public:
+    template<typename RandomEngine = nullptr_t>
     Network(Target target = Target{Target::Regression},
             std::vector<std::size_t> layers = {1},
             RandomEngine* random_engine = nullptr)
@@ -122,12 +124,16 @@ public:
         }
         weights_.resize(weight_count);
 
-        if (random_engine)
+        if constexpr (!std::is_same_v<RandomEngine, nullptr_t>)
         {
-            init_weights(*random_engine);
+            if (random_engine)
+            {
+                init_weights(*random_engine);
+            }
         }
     }
 
+    template<typename RandomEngine>
     void init_weights(RandomEngine& random_engine)
     {
         auto weights = weights_.data();

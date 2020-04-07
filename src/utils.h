@@ -15,6 +15,7 @@ struct Split
     std::vector<std::vector<float>> y_test;
 };
 
+template<typename RandomEngine>
 inline Split split_train_test(const std::vector<std::vector<float>>& X,
                               const std::vector<std::vector<float>>& y,
                               const float test_ratio,

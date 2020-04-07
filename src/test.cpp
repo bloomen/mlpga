@@ -39,10 +39,10 @@ int main()
         }
     }
 
-    mlpga::DefaultRandomEngine random_engine{42};
+    std::default_random_engine random_engine{std::time(nullptr)};
 
     const auto split = mlpga::split_train_test(X, y, 0.3f, random_engine);
-    std::cout << "training with " << split.X_train.size() << " samples" << std::endl;
+    std::cout << "Training with " << split.X_train.size() << " samples" << std::endl;
 
     const std::vector<std::size_t> layers = {13, 13, 1};
     const std::size_t n_generations = 100;
@@ -53,13 +53,13 @@ int main()
 
     mlpga::Printer printer = [](const std::string& value) { std::cout << value << std::flush; };
     const mlpga::Network network{target, layers, &random_engine};
+    std::cout << network.arch_string() << std::endl;
     const auto model = mlpga::optimize(network, n_generations,
                                        population_size, crossover_ratio,
                                        mutate_ratio, mutate_sigma,
                                        split.X_train, split.y_train,
                                        mlpga::mae,
-                                       printer,
-                                       random_engine);
+                                       printer);
 
     std::stringstream ss;
     mlpga::Writer writer = [&ss](auto&&... p){ ss.write(std::forward<decltype(p)>(p)...); };
@@ -69,7 +69,7 @@ int main()
     mlpga::Reader reader = [&ss](auto&&... p){ ss.read(std::forward<decltype(p)>(p)...); };
     const auto net = mlpga::Network::load(reader);
 
-    std::cout << "prediction" << std::endl;
+    std::cout << "Prediction..." << std::endl;
     std::vector<std::vector<float>> pred;
     for (const auto& row : split.X_test)
     {
