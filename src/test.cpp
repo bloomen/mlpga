@@ -49,14 +49,14 @@ int main()
     const std::size_t population_size = 1000;
     const float crossover_ratio = 0.5f;
     const float mutate_ratio = 0.1f;
-    const float mutate_sigma = 1.0f;
+    const float mutate_scale = 1.0f;
 
     mlpga::Printer printer = [](const std::string& value) { std::cout << value << std::flush; };
     const mlpga::Network network{target, layers, &random_engine};
     std::cout << network.arch_string() << std::endl;
     const auto model = mlpga::optimize(network, n_generations,
                                        population_size, crossover_ratio,
-                                       mutate_ratio, mutate_sigma,
+                                       mutate_ratio, mutate_scale,
                                        split.X_train, split.y_train,
                                        mlpga::mae,
                                        printer);

@@ -36,7 +36,7 @@ inline void give_birth(float* const w1,
                        const std::size_t n,
                        const float crossover_ratio,
                        const float mutate_ratio,
-                       const float mutate_sigma,
+                       const float mutate_scale,
                        RandomEngine& random_engine)
 {
     assert(w1 != nullptr);
@@ -46,9 +46,8 @@ inline void give_birth(float* const w1,
     assert(crossover_ratio < 1.0f);
     assert(mutate_ratio > 0.0f);
     assert(mutate_ratio < 1.0f);
-    assert(mutate_sigma > 0.0f);
+    assert(mutate_scale > 0.0f);
     std::uniform_real_distribution<float> uniform;
-    std::normal_distribution<float> normal(0.0f, mutate_sigma);
     for (std::size_t i = 0; i < n; ++i)
     {
         if (uniform(random_engine) < crossover_ratio)
@@ -57,11 +56,11 @@ inline void give_birth(float* const w1,
         }
         if (uniform(random_engine) < mutate_ratio)
         {
-            w1[i] += w1[i] * normal(random_engine);
+            w1[i] += w1[i] * (uniform(random_engine) - 0.5f) * mutate_scale;
         }
         if (uniform(random_engine) < mutate_ratio)
         {
-            w2[i] += w2[i] * normal(random_engine);
+            w2[i] += w2[i] * (uniform(random_engine) - 0.5f) * mutate_scale;
         }
     }
 }
@@ -117,7 +116,7 @@ struct ReproParams
     const std::size_t n_fittest;
     const float crossover_ratio;
     const float mutate_ratio;
-    const float mutate_sigma;
+    const float mutate_scale;
     const std::function<float(const float*, const float*, std::size_t)>& fitness;
     const std::vector<std::vector<float>>& X;
     const std::vector<float>& y;
@@ -144,7 +143,7 @@ inline std::shared_ptr<tw::task<void>> reproduce(const ReproParams& params)
                            child1->network.get_weights().size(),
                            params.crossover_ratio,
                            params.mutate_ratio,
-                           params.mutate_sigma,
+                           params.mutate_scale,
                            random_engine);
                 static thread_local std::vector<float> pred(params.y.size());
                 evaluate(*child1, params.fitness, params.X, params.y, pred.data());
@@ -162,7 +161,7 @@ inline Model optimize(const Network& network,
                       std::size_t population_size,
                       const float crossover_ratio,
                       const float mutate_ratio,
-                      const float mutate_sigma,
+                      const float mutate_scale,
                       const std::vector<std::vector<float>>& X,
                       const std::vector<std::vector<float>>& y,
                       const std::function<float(const float*, const float*, std::size_t)>& fitness,
@@ -191,7 +190,7 @@ inline Model optimize(const Network& network,
         n_fittest,
         crossover_ratio,
         mutate_ratio,
-        mutate_sigma,
+        mutate_scale,
         fitness,
         X,
         y_ref

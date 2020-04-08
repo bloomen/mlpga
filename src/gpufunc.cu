@@ -36,7 +36,7 @@ __global__ void setup_rand(curandState* state)
 
 __global__ void give_birth(float* w1, float* w2, std::size_t n,
                            float crossover_ratio, float mutate_ratio,
-                           float mutate_sigma, curandState* d_state)
+                           float mutate_scale, curandState* d_state)
 {
     auto tid = threadIdx.x + blockIdx.x * blockDim.x;
     while (tid < n) {
@@ -48,11 +48,11 @@ __global__ void give_birth(float* w1, float* w2, std::size_t n,
         }
         if (curand_uniform(d_state + tid) < mutate_ratio)
         {
-            w1[tid] += w1[tid] * (curand_uniform(d_state + tid) - 0.5f);
+            w1[tid] += w1[tid] * (curand_uniform(d_state + tid) - 0.5f) * mutate_scale;
         }
         if (curand_uniform(d_state + tid) < mutate_ratio)
         {
-            w2[tid] += w2[tid] * (curand_uniform(d_state + tid) - 0.5f);
+            w2[tid] += w2[tid] * (curand_uniform(d_state + tid) - 0.5f) * mutate_scale;
         }
         tid += blockDim.x * gridDim.x;
     }
@@ -82,12 +82,12 @@ void divide_by(cudaStream_t& stream, float& data, const std::size_t n, const flo
 #define ITER 10000000
 
 void give_birth(cudaStream_t& stream, float* w1, float* w2, std::size_t n,
-                float crossover_ratio, float mutate_ratio, float mutate_sigma)
+                float crossover_ratio, float mutate_ratio, float mutate_scale)
 {
     curandState* d_state;
     cudaMalloc(&d_state, sizeof(curandState));
     kernel::setup_rand<<<128, 128, 0, stream>>>(d_state);
-    kernel::give_birth<<<128, 128, 0, stream>>>(w1, w2, n, crossover_ratio, mutate_ratio, mutate_sigma, d_state);
+    kernel::give_birth<<<128, 128, 0, stream>>>(w1, w2, n, crossover_ratio, mutate_ratio, mutate_scale, d_state);
     cudaFree(d_state);
 }
 
