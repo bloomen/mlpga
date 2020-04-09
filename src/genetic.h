@@ -132,12 +132,57 @@ inline std::shared_ptr<tw::task<void>> reproduce(const ReproParams& params)
         auto children_task = tw::make_task(tw::root,
             [&params, i]
             {
-                // TODO: move this to the GPU. Weight update and predict
-                static thread_local std::default_random_engine random_engine{time_seed()};
                 auto child1 = params.population[params.n_fittest + i].get();
                 auto child2 = params.population[params.n_fittest + i + 1].get();
+#ifdef MLPGA_USE_GPU
+                const float* hostW1 = params.population[i]->network.get_weights().data();
+                const float* hostW2 = params.population[i + 1]->network.get_weights().data();
+                const auto size = child1->network.get_weights().size();
+
+                static thread_local gpu::Stream stream;
+                static thread_local gpu::Array arrayW1{stream, size, true};
+                static thread_local gpu::Array arrayW2{stream, size, true};
+                static thread_local gpu::Array gpuRandCrossover{stream, size};
+                static thread_local gpu::Array gpuRandMutateRatio1{stream, size};
+                static thread_local gpu::Array gpuRandMutateScale1{stream, size};
+                static thread_local gpu::Array gpuRandMutateRatio2{stream, size};
+                static thread_local gpu::Array gpuRandMutateScale2{stream, size};
+                static thread_local gpu::RandomState random_state{stream, time_seed() + i};
+
+                std::copy(hostW1, hostW1 + size, arrayW1.host());
+                std::copy(hostW2, hostW2 + size, arrayW2.host());
+
+                random_state.generate(gpuRandCrossover);
+                random_state.generate(gpuRandMutateRatio1);
+                random_state.generate(gpuRandMutateScale1);
+                random_state.generate(gpuRandMutateRatio2);
+                random_state.generate(gpuRandMutateScale2);
+
+                arrayW1.copy_to_device();
+                arrayW2.copy_to_device();
+
+                gpu::crossover(stream, arrayW1, arrayW2,
+                               params.crossover_ratio, gpuRandCrossover);
+
+                gpu::mutate(stream, arrayW1,
+                            params.mutate_ratio, params.mutate_scale,
+                            gpuRandMutateRatio1, gpuRandMutateScale1);
+
+                gpu::mutate(stream, arrayW2,
+                            params.mutate_ratio, params.mutate_scale,
+                            gpuRandMutateRatio2, gpuRandMutateScale2);
+
+                arrayW1.copy_to_host();
+                arrayW2.copy_to_host();
+
+                stream.sync();
+
+                std::copy(arrayW1.host(), arrayW1.host() + size, child1->network.get_weights().data());
+                std::copy(arrayW2.host(), arrayW2.host() + size, child2->network.get_weights().data());
+#else
                 *child1 = *params.population[i];
                 *child2 = *params.population[i + 1];
+                static thread_local std::default_random_engine random_engine{time_seed() + i};
                 give_birth(child1->network.get_weights().data(),
                            child2->network.get_weights().data(),
                            child1->network.get_weights().size(),
@@ -145,6 +190,7 @@ inline std::shared_ptr<tw::task<void>> reproduce(const ReproParams& params)
                            params.mutate_ratio,
                            params.mutate_scale,
                            random_engine);
+#endif
                 static thread_local std::vector<float> pred(params.y.size());
                 evaluate(*child1, params.fitness, params.X, params.y, pred.data());
                 evaluate(*child2, params.fitness, params.X, params.y, pred.data());

@@ -28,6 +28,7 @@ target_compile_features(${APP} PUBLIC cxx_std_11)
 
 if (MLPGA_USE_GPU)
     target_compile_definitions(${APP} PUBLIC MLPGA_USE_GPU)
+    target_link_libraries(${APP} curand)
 endif()
 
 if (MSVC)
