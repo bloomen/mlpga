@@ -214,19 +214,17 @@ void device_sync()
 void crossover(Stream& stream, Array& w1, Array& w2,
                const float crossover_ratio, const Array& rnd)
 {
-    const auto n_blocks = (w1.size() + 127) / 128;
-    kernel::crossover<<<n_blocks, 128, 0, from(stream)>>>(w1.device(), w2.device(), w1.size(),
-                                                          crossover_ratio, rnd.device());
+    kernel::crossover<<<128, 128, 0, from(stream)>>>(w1.device(), w2.device(), w1.size(),
+                                                     crossover_ratio, rnd.device());
 }
 
 void mutate(Stream& stream, Array& w,
             const float mutate_ratio, const float mutate_scale,
             const Array& rnd_ratio, const Array& rnd_scale)
 {
-    const auto n_blocks = (w.size() + 127) / 128;
-    kernel::mutate<<<n_blocks, 128, 0, from(stream)>>>(w.device(), w.size(),
-                                                       mutate_ratio, mutate_scale,
-                                                       rnd_ratio.device(), rnd_scale.device());
+    kernel::mutate<<<128, 128, 0, from(stream)>>>(w.device(), w.size(),
+                                                  mutate_ratio, mutate_scale,
+                                                  rnd_ratio.device(), rnd_scale.device());
 }
 
 }
