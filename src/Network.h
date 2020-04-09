@@ -10,31 +10,11 @@
 #include <type_traits>
 
 #include "init.h"
+#include "math.h"
 #include "utils.h"
 
 namespace mlpga
 {
-
-struct Target
-{
-    enum Type : std::uint8_t
-    {
-        Classification,
-        Regression,
-    };
-
-    Target(const Type type,
-           const float class0 = 0.0f,
-           const float class1 = 1.0f)
-        : type{type}
-        , class0{class0}
-        , class1{class1}
-    {}
-
-    Type type;
-    float class0;
-    float class1;
-};
 
 using Printer = std::function<void(const std::string& value)>;
 using Writer = std::function<void(const char* value, std::size_t size)>;
@@ -42,47 +22,6 @@ using Reader = std::function<void(char* value, std::size_t size)>;
 
 namespace detail
 {
-
-inline void softmax(float* const output, const std::size_t n)
-{
-    const auto D = *std::max_element(output, output + n);
-    float denom = 1e-6f;
-    for (std::size_t i = 0; i < n; ++i)
-    {
-        output[i] -= D; // for numerical stability
-        denom += std::exp(output[i]);
-    }
-    for (std::size_t i = 0; i < n; ++i)
-    {
-        output[i] = std::exp(output[i]) / denom;
-    }
-}
-
-inline void sigmoid(float& x)
-{
-    x = 1.0f / (1.0f + std::exp(-x));
-}
-
-inline void relu(float& x)
-{
-    if (x < 0.0f)
-    {
-        x = 0.0f;
-    }
-}
-
-inline float activate(const float* const weights,
-                      const float* const inputs,
-                      const std::size_t n)
-{
-    float output = 0.0f;
-    for (std::size_t i = 0; i < n; ++i)
-    {
-        output += weights[i] * inputs[i];
-    }
-    output += weights[n]; // bias
-    return output;
-}
 
 template<typename T>
 void write(Writer& writer, const T& value)
@@ -231,57 +170,9 @@ public:
 
     void predict(float* const output, const float* const input) const
     {
-        const auto input_size = layers_.front();
-        const auto output_size = layers_.back();
-
         static thread_local std::vector<float> new_in(*std::max_element(layers_.begin(), layers_.end()));
         static thread_local std::vector<float> new_out(new_in.size());
-
-        auto weights = weights_.data();
-        std::size_t current_size = input_size;
-        std::size_t weight_count = 2u;
-        const float* source = input;
-        for (std::size_t i = 0; i < layers_.size(); ++i)
-        {
-            auto target = i == layers_.size() - 1 ? output : new_out.data();
-            for (std::size_t j = 0; j < layers_[i]; ++j)
-            {
-                auto value = detail::activate(weights, source, current_size);
-                if (i < layers_.size() - 1)
-                {
-                    detail::relu(value);
-                }
-                target[j] = value;
-                weights += weight_count;
-            }
-            if (i < layers_.size() - 1)
-            {
-                current_size = layers_[i];
-                weight_count = current_size + 1;
-                source = new_in.data();
-                std::copy(target, target + layers_[i], new_in.begin());
-            }
-        }
-        assert(weights == weights_.data() + weights_.size());
-
-        if (target_.type == Target::Classification)
-        {
-            if (output_size == 1)
-            {
-                detail::sigmoid(*output);
-            }
-            else
-            {
-                detail::softmax(output, output_size);
-            }
-            const auto factor = target_.class1 - target_.class0;
-            const auto offset = target_.class0;
-            std::for_each(output, output + output_size, [factor, offset](float& x)
-            {
-                x *= factor;
-                x += offset;
-            });
-        }
+        detail::predict(output, input, target_, weights_.data(), weights_.size(), layers_.data(), layers_.size(), new_in.data(), new_out.data());
     }
 
 private:
